@@ -1,59 +1,105 @@
-# GroundStaffMock
+# Ground Staff Mock Interview
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 22.2.2.
+Angular based mock interview website for aviation ground staff practice.
 
-## Development server
+The app lets a candidate select a ground operations department, answer random interview questions, record answers through webcam and mic, and review the final score with video previews.
 
-To start a local development server, run:
+## Features
 
-```bash
-ng serve
-```
+- Department selection for:
+  - Customer Service
+  - Security Officer
+  - Cabin Appearance
+  - Cargo
+  - Ramp
+  - Catering
+- Random HR, safety, scenario and operations questions
+- Webcam and microphone recording for every answer
+- Final result page with score, answer notes and video preview
+- Recording download option
+- Custom question upload using a simple `.txt` file
+- Sample question template download from the website
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
+## Tech Stack
 
-## Code scaffolding
+- Angular 22
+- TypeScript
+- HTML/CSS
+- Browser MediaRecorder API
 
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
+## Run Locally
 
-```bash
-ng generate component component-name
-```
-
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
-
-```bash
-ng generate --help
-```
-
-## Building
-
-To build the project run:
-
-```bash
-ng build
-```
-
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
-
-## Running unit tests
-
-To execute unit tests with the [Vitest](https://vitest.dev/) test runner, use the following command:
+Install dependencies:
 
 ```bash
-ng test
+npm install
 ```
 
-## Running end-to-end tests
-
-For end-to-end (e2e) testing, run:
+Start the development server:
 
 ```bash
-ng e2e
+npm start
 ```
 
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
+Open:
 
-## Additional Resources
+```text
+http://localhost:4200/
+```
 
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+If port `4200` is busy, run:
+
+```bash
+npm start -- --port 4201
+```
+
+## Build
+
+```bash
+npm run build
+```
+
+The production build will be created inside:
+
+```text
+dist/ground-staff-mock
+```
+
+## Custom Question File Format
+
+Download the sample file from the website and edit only the question lines.
+
+Lines starting with `#` are information lines and are ignored by the app.
+
+Format:
+
+```text
+department-code | question | important words | marks
+```
+
+Example:
+
+```text
+customer-service | How will you help a first-time flyer who is confused at check-in? | empathy, documents, guidance, calm | 10
+security | What will you do if you see an unattended bag near the gate? | do not touch, report, cordon, procedure | 10
+ramp | What will you do if you see foreign object debris near an aircraft stand? | FOD, stop, remove, report, safety | 10
+```
+
+Valid department codes:
+
+```text
+customer-service
+security
+cabin-appearance
+cargo
+ramp
+catering
+```
+
+## Camera Permission
+
+Webcam recording works on `localhost` or HTTPS. The browser will ask for camera and microphone permission when the mock interview starts.
+
+## Notes
+
+Recordings are created in the browser for the current session. They can be previewed and downloaded from the result screen.

@@ -1,0 +1,215 @@
+<main class="shell">
+  <section class="topbar">
+    <div>
+      <p class="eyebrow">Aviation Ground Staff Mock Panel</p>
+      <h1>Airport Operations Interview Simulator</h1>
+    </div>
+    <div class="status-strip">
+      <span>{{ activeDepartment().name }}</span>
+      <strong>{{ availableCount() }} questions</strong>
+    </div>
+  </section>
+
+  @if (stage() === 'setup') {
+    <section class="setup-grid">
+      <div class="panel intro-panel">
+        <div class="hero-image" aria-hidden="true"></div>
+        <div class="intro-copy">
+          <p class="eyebrow">Role based practice</p>
+          <h2>Select department and start a recorded mock round</h2>
+          <p>
+            Random HR, scenario, safety and operations questions are generated from the selected ground handling department.
+          </p>
+        </div>
+      </div>
+
+      <div class="panel controls-panel">
+        <label>
+          Candidate name
+          <input
+            type="text"
+            [ngModel]="candidateName()"
+            (ngModelChange)="candidateName.set($event)"
+            placeholder="Enter name"
+          />
+        </label>
+
+        <div class="control-row">
+          <label>
+            Questions
+            <select [ngModel]="examSize()" (ngModelChange)="setExamSize($event)">
+              <option value="4">4</option>
+              <option value="6">6</option>
+              <option value="8">8</option>
+            </select>
+          </label>
+          <label>
+            Timer per answer
+            <select [ngModel]="questionSeconds()" (ngModelChange)="questionSeconds.set(+$event)">
+              <option value="60">60 sec</option>
+              <option value="90">90 sec</option>
+              <option value="120">120 sec</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="upload-box">
+          <div>
+            <strong>Custom question file</strong>
+            <span>{{ uploadMessage() }}</span>
+          </div>
+          <div class="upload-actions">
+            <button type="button" class="secondary" (click)="downloadSample()">Download sample</button>
+            <label class="file-button">
+              Upload .txt
+              <input type="file" accept=".txt,text/plain" (change)="importQuestions($event)" />
+            </label>
+          </div>
+        </div>
+
+        <button type="button" class="primary start-button" (click)="startInterview()" [disabled]="availableCount() === 0">
+          Start mock interview
+        </button>
+      </div>
+    </section>
+
+    <section class="departments">
+      @for (department of departments; track department.id) {
+        <button
+          type="button"
+          class="department-card"
+          [class.active]="selectedDepartment() === department.id"
+          [style.--accent]="department.color"
+          (click)="selectDepartment(department.id)"
+        >
+          <span>{{ department.icon }}</span>
+          <strong>{{ department.name }}</strong>
+          <small>{{ department.area }}</small>
+        </button>
+      }
+    </section>
+  }
+
+  @if (stage() === 'interview') {
+    <section class="exam-layout">
+      <div class="panel question-panel">
+        <div class="question-meta">
+          <span>Question {{ currentIndex() + 1 }} of {{ interviewQuestions().length }}</span>
+          <span>{{ currentQuestion()?.type }}</span>
+        </div>
+        <div class="progress-track">
+          <div [style.width.%]="progress()"></div>
+        </div>
+        <h2>{{ currentQuestion()?.prompt }}</h2>
+        <div class="keyword-row">
+          @for (keyword of currentQuestion()?.keywords; track keyword) {
+            <span>{{ keyword }}</span>
+          }
+        </div>
+
+        <label class="range-label">
+          Answer confidence: {{ currentRating() }}/5
+          <input
+            type="range"
+            min="1"
+            max="5"
+            step="1"
+            [ngModel]="currentRating()"
+            (ngModelChange)="currentRating.set(+$event)"
+          />
+        </label>
+
+        <label>
+          Interviewer notes
+          <textarea
+            [ngModel]="currentNotes()"
+            (ngModelChange)="currentNotes.set($event)"
+            placeholder="Short self-review, missed points, examples used"
+          ></textarea>
+        </label>
+
+        <div class="exam-actions">
+          <button type="button" class="secondary" (click)="restart()">Exit</button>
+          <button type="button" class="primary" (click)="saveAndNext()">
+            {{ currentIndex() + 1 === interviewQuestions().length ? 'Finish round' : 'Save & next' }}
+          </button>
+        </div>
+      </div>
+
+      <div class="panel camera-panel">
+        <div class="camera-frame">
+          <video #cameraPreview autoplay muted playsinline></video>
+          @if (!cameraReady()) {
+            <div class="camera-placeholder">
+              <strong>Camera permission needed</strong>
+              <button type="button" class="secondary" (click)="enableCamera()">Enable camera</button>
+            </div>
+          }
+        </div>
+        <div class="record-bar">
+          <div>
+            <span [class.live]="isRecording()"></span>
+            <strong>{{ isRecording() ? 'Recording' : 'Ready' }}</strong>
+            <small>{{ formatTime(recordingSeconds()) }} / {{ questionSeconds() }} sec</small>
+          </div>
+          @if (isRecording()) {
+            <button type="button" class="danger" (click)="stopRecording()">Stop</button>
+          } @else {
+            <button type="button" class="primary" (click)="startRecording()" [disabled]="!cameraReady()">Record answer</button>
+          }
+        </div>
+      </div>
+    </section>
+  }
+
+  @if (stage() === 'results') {
+    <section class="results-layout">
+      <div class="panel score-panel">
+        <p class="eyebrow">Final Result</p>
+        <h2>{{ finalScore() }}%</h2>
+        <strong>{{ resultBand() }}</strong>
+        <span>{{ candidateName() || 'Practice Candidate' }} · {{ activeDepartment().name }}</span>
+        <div class="score-actions">
+          <button type="button" class="primary" (click)="exportResults()">Download result</button>
+          <button type="button" class="secondary" (click)="restart()">New mock</button>
+        </div>
+      </div>
+
+      <div class="review-list">
+        <article class="panel preview-panel">
+          <div class="question-meta">
+            <span>Video Preview</span>
+            <strong>Answer {{ previewIndex() + 1 }}</strong>
+          </div>
+          @if (previewAnswer()?.videoUrl) {
+            <video [src]="previewAnswer()?.videoUrl" controls></video>
+            <h3>{{ previewAnswer()?.question?.prompt }}</h3>
+            <a [href]="previewAnswer()?.videoUrl" download="selected-mock-answer.webm">Download selected recording</a>
+          } @else {
+            <div class="empty-preview">
+              <strong>No video selected</strong>
+              <span>Record an answer during the mock round to preview it here.</span>
+            </div>
+          }
+        </article>
+
+        @for (answer of answers(); track answer.question.prompt; let index = $index) {
+          <article class="panel review-card">
+            <div class="question-meta">
+              <span>Answer {{ index + 1 }}</span>
+              <strong>{{ answer.rating }}/5</strong>
+            </div>
+            <h3>{{ answer.question.prompt }}</h3>
+            <p>{{ answer.notes || 'No notes added.' }}</p>
+            @if (answer.videoUrl) {
+              <button type="button" class="secondary" (click)="selectPreview(index)">Preview recording</button>
+              <a [href]="answer.videoUrl" download="mock-answer.webm">Download recording</a>
+            } @else {
+              <span class="missing-video">No recording saved for this answer</span>
+            }
+          </article>
+        }
+      </div>
+    </section>
+  }
+</main>
