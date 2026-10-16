@@ -13,8 +13,10 @@ The app lets a candidate select a ground operations department, answer random in
   - Cargo
   - Ramp
   - Catering
+  - General HR & Airport Basics (HR, situation based and airport knowledge questions)
 - Random HR, safety, scenario and operations questions
-- Webcam and microphone recording for every answer
+- Auto flow for every question: the question blinks (5-10 sec, selectable) and recording starts automatically, then the question is hidden and the candidate gets the answer time (default 45 sec), then the next question comes by itself
+- Webcam and microphone recording for every answer (works on phone browsers over HTTPS)
 - Final result page with score, answer notes and video preview
 - Recording download option
 - Custom question upload using a simple `.txt` file
@@ -94,11 +96,12 @@ cabin-appearance
 cargo
 ramp
 catering
+general
 ```
 
 ## Camera Permission
 
-Webcam recording works on `localhost` or HTTPS. The browser will ask for camera and microphone permission when the mock interview starts.
+Webcam recording works on `localhost` or HTTPS only (on a phone use the https:// site link, a plain `http://192.168.x.x` address will not get camera access). The browser will ask for camera and microphone permission when the mock interview starts. If the camera fails, the screen shows the reason with a **Retry camera** button.
 
 ## Notes
 

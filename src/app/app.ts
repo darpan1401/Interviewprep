@@ -1,10 +1,18 @@
 import { CommonModule } from '@angular/common';
-import { Component, ElementRef, ViewChild, computed, signal } from '@angular/core';
+import { Component, ElementRef, OnDestroy, ViewChild, computed, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { GENERAL_QUESTIONS } from './general-questions';
 
 type Stage = 'setup' | 'interview' | 'results';
 
-type DepartmentId = 'customer-service' | 'security' | 'cabin-appearance' | 'cargo' | 'ramp' | 'catering';
+type DepartmentId =
+  | 'customer-service'
+  | 'security'
+  | 'cabin-appearance'
+  | 'cargo'
+  | 'ramp'
+  | 'catering'
+  | 'general';
 
 interface Department {
   id: DepartmentId;
@@ -27,6 +35,7 @@ interface AnswerRecord {
   rating: number;
   notes: string;
   videoUrl?: string;
+  extension: string;
   durationSeconds: number;
 }
 
@@ -72,6 +81,13 @@ const DEPARTMENTS: Department[] = [
     area: 'Flight kitchen, meal uplift, hygiene and seals',
     icon: 'CT',
     color: '#7a3455',
+  },
+  {
+    id: 'general',
+    name: 'General HR & Airport Basics',
+    area: 'HR, situation based and airport knowledge questions',
+    icon: 'GN',
+    color: '#0f6b8a',
   },
 ];
 
@@ -260,21 +276,49 @@ const BANK: Question[] = [
   },
 ];
 
+const GENERAL_BANK: Question[] = GENERAL_QUESTIONS.map((item) => ({
+  department: 'general' as const,
+  prompt: item.prompt,
+  type: item.type,
+  keywords: item.keywords,
+  maxScore: 10,
+}));
+
+type Phase = 'idle' | 'question' | 'answer';
+
+interface RecordedMedia {
+  url: string;
+  extension: string;
+}
+
 @Component({
   imports: [CommonModule, FormsModule],
   selector: 'app-root',
   styleUrl: './app.css',
   templateUrl: './app.html',
 })
-export class App {
-  @ViewChild('cameraPreview') cameraPreview?: ElementRef<HTMLVideoElement>;
+export class App implements OnDestroy {
+  private cameraEl?: HTMLVideoElement;
+
+  // Setter keeps the stream attached even if the <video> is created after the camera is ready
+  // (this was one of the reasons the preview stayed black on phones).
+  @ViewChild('cameraPreview')
+  set cameraPreviewRef(ref: ElementRef<HTMLVideoElement> | undefined) {
+    this.cameraEl = ref?.nativeElement;
+    this.attachStream();
+  }
 
   readonly departments = DEPARTMENTS;
+  readonly examSizeOptions = [4, 6, 8, 10, 15, 20, 25, 30];
+  readonly blinkOptions = [5, 6, 7, 8, 9, 10];
+  readonly answerOptions = [30, 45, 60, 90, 120];
+
   readonly selectedDepartment = signal<DepartmentId>('customer-service');
   readonly stage = signal<Stage>('setup');
   readonly candidateName = signal('');
   readonly examSize = signal(6);
-  readonly questionSeconds = signal(90);
+  readonly blinkSeconds = signal(10);
+  readonly answerSeconds = signal(45);
   readonly customQuestions = signal<Question[]>([]);
   readonly interviewQuestions = signal<Question[]>([]);
   readonly answers = signal<AnswerRecord[]>([]);
@@ -282,16 +326,21 @@ export class App {
   readonly currentRating = signal(3);
   readonly currentNotes = signal('');
   readonly cameraReady = signal(false);
+  readonly cameraMessage = signal('');
   readonly isRecording = signal(false);
   readonly recordingSeconds = signal(0);
+  readonly phase = signal<Phase>('idle');
+  readonly secondsLeft = signal(0);
   readonly uploadMessage = signal('No custom file added');
   readonly previewIndex = signal(0);
 
   private stream?: MediaStream;
   private recorder?: MediaRecorder;
   private chunks: Blob[] = [];
-  private recordingTimer?: number;
-  private activeStartedAt = 0;
+  private ticker?: number;
+  private phaseEndsAt = 0;
+  private questionStartedAt = 0;
+  private advancing = false;
 
   readonly activeDepartment = computed(
     () => this.departments.find((department) => department.id === this.selectedDepartment()) ?? this.departments[0],
@@ -301,10 +350,17 @@ export class App {
     () => this.allQuestions().filter((question) => question.department === this.selectedDepartment()).length,
   );
 
+  readonly totalQuestionSeconds = computed(() => this.blinkSeconds() + this.answerSeconds());
+
   readonly currentQuestion = computed(() => this.interviewQuestions()[this.currentIndex()]);
   readonly progress = computed(() => {
     const total = this.interviewQuestions().length || 1;
     return Math.round(((this.currentIndex() + 1) / total) * 100);
+  });
+
+  readonly phaseProgress = computed(() => {
+    const total = this.phase() === 'question' ? this.blinkSeconds() : this.answerSeconds();
+    return total ? Math.round((this.secondsLeft() / total) * 100) : 0;
   });
 
   readonly finalScore = computed(() => {
@@ -322,16 +378,17 @@ export class App {
 
   readonly previewAnswer = computed(() => this.answers()[this.previewIndex()]);
 
+  ngOnDestroy(): void {
+    this.clearTicker();
+    this.stopCamera();
+  }
+
   allQuestions(): Question[] {
-    return [...BANK, ...this.customQuestions()];
+    return [...BANK, ...GENERAL_BANK, ...this.customQuestions()];
   }
 
   selectDepartment(id: DepartmentId): void {
     this.selectedDepartment.set(id);
-  }
-
-  setExamSize(value: string): void {
-    this.examSize.set(Number(value));
   }
 
   async startInterview(): Promise<void> {
@@ -342,86 +399,130 @@ export class App {
     this.currentIndex.set(0);
     this.currentRating.set(3);
     this.currentNotes.set('');
+    this.recordingSeconds.set(0);
+    this.advancing = false;
+    this.phase.set('idle');
     this.stage.set('interview');
-    await this.enableCamera();
+
+    const ok = await this.enableCamera();
+    // User may have pressed Exit while the permission prompt was open.
+    if (this.stage() !== 'interview') return;
+    if (ok) this.beginQuestion();
   }
 
-  async enableCamera(): Promise<void> {
+  async retryCamera(): Promise<void> {
+    const ok = await this.enableCamera();
+    if (ok && this.stage() === 'interview' && this.phase() === 'idle') this.beginQuestion();
+  }
+
+  startWithoutCamera(): void {
+    if (this.stage() === 'interview' && this.phase() === 'idle') this.beginQuestion();
+  }
+
+  async enableCamera(): Promise<boolean> {
     if (this.stream) {
       this.attachStream();
+      return true;
+    }
+
+    this.cameraMessage.set('');
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      this.cameraMessage.set(
+        window.isSecureContext
+          ? 'This browser does not support camera access. Please use latest Chrome or Safari.'
+          : 'Camera works only on HTTPS (or localhost). Please open the https:// link of the site on your phone.',
+      );
+      this.cameraReady.set(false);
+      return false;
+    }
+
+    // Try from best to simplest constraints so that phones that reject 1280x720 or audio still work.
+    const attempts: { constraints: MediaStreamConstraints; audioMissing: boolean }[] = [
+      {
+        constraints: { audio: true, video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } } },
+        audioMissing: false,
+      },
+      { constraints: { audio: true, video: { facingMode: 'user' } }, audioMissing: false },
+      { constraints: { audio: true, video: true }, audioMissing: false },
+      { constraints: { audio: false, video: true }, audioMissing: true },
+    ];
+
+    let lastError: unknown;
+    for (const attempt of attempts) {
+      try {
+        this.stream = await navigator.mediaDevices.getUserMedia(attempt.constraints);
+        this.cameraReady.set(true);
+        this.cameraMessage.set(attempt.audioMissing ? 'Microphone not available - recording video only.' : '');
+        this.attachStream();
+        return true;
+      } catch (error) {
+        lastError = error;
+        const name = (error as DOMException | undefined)?.name;
+        // Permission problems will not be solved by simpler constraints.
+        if (name === 'NotAllowedError' || name === 'SecurityError' || name === 'NotFoundError') break;
+      }
+    }
+
+    this.cameraReady.set(false);
+    this.cameraMessage.set(this.describeCameraError(lastError));
+    return false;
+  }
+
+  async next(): Promise<void> {
+    const question = this.currentQuestion();
+    if (!question || this.advancing) return;
+    this.advancing = true;
+    this.clearTicker();
+
+    const durationSeconds = this.questionStartedAt ? Math.round((Date.now() - this.questionStartedAt) / 1000) : 0;
+    const media = await this.stopRecordingAndBuild();
+
+    // User pressed Exit while the recording was being finalised.
+    if (this.stage() !== 'interview') {
+      if (media) URL.revokeObjectURL(media.url);
       return;
     }
 
-    try {
-      this.stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: { width: 1280, height: 720 } });
-      this.cameraReady.set(true);
-      this.attachStream();
-    } catch {
-      this.cameraReady.set(false);
-    }
-  }
-
-  startRecording(): void {
-    if (!this.stream || this.isRecording()) return;
-    this.chunks = [];
-    this.recorder = new MediaRecorder(this.stream);
-    this.recorder.ondataavailable = (event) => {
-      if (event.data.size) this.chunks.push(event.data);
-    };
-    this.activeStartedAt = Date.now();
-    this.recordingSeconds.set(0);
-    this.recordingTimer = window.setInterval(() => {
-      this.recordingSeconds.set(Math.floor((Date.now() - this.activeStartedAt) / 1000));
-    }, 1000);
-    this.recorder.start();
-    this.isRecording.set(true);
-  }
-
-  stopRecording(): void {
-    if (!this.recorder || !this.isRecording()) return;
-    this.recorder.stop();
-    this.isRecording.set(false);
-    window.clearInterval(this.recordingTimer);
-  }
-
-  async saveAndNext(): Promise<void> {
-    const question = this.currentQuestion();
-    if (!question) return;
-
-    const videoUrl = await this.stopAndBuildVideoUrl();
     const record: AnswerRecord = {
       question,
       rating: this.currentRating(),
       notes: this.currentNotes(),
-      videoUrl,
-      durationSeconds: this.recordingSeconds(),
+      videoUrl: media?.url,
+      extension: media?.extension ?? 'webm',
+      durationSeconds,
     };
 
     this.answers.update((answers) => [...answers, record]);
     this.currentRating.set(3);
     this.currentNotes.set('');
-    this.recordingSeconds.set(0);
 
     if (this.currentIndex() + 1 >= this.interviewQuestions().length) {
       this.previewIndex.set(0);
+      this.phase.set('idle');
       this.stage.set('results');
       this.stopCamera();
+      this.advancing = false;
       return;
     }
 
     this.currentIndex.update((index) => index + 1);
-    setTimeout(() => this.attachStream());
+    this.beginQuestion();
   }
 
   restart(): void {
     this.answers().forEach((answer) => {
       if (answer.videoUrl) URL.revokeObjectURL(answer.videoUrl);
     });
+    this.clearTicker();
+    this.advancing = false;
+    this.phase.set('idle');
     this.stage.set('setup');
     this.answers.set([]);
     this.interviewQuestions.set([]);
     this.previewIndex.set(0);
     this.currentIndex.set(0);
+    this.recordingSeconds.set(0);
     this.stopCamera();
   }
 
@@ -444,6 +545,7 @@ export class App {
       '# cargo',
       '# ramp',
       '# catering',
+      '# general',
       '#',
       '# EXAMPLE - You can copy this style:',
       '# customer-service | How will you help a passenger whose baggage is overweight? | polite, policy, options, supervisor | 10',
@@ -453,6 +555,7 @@ export class App {
       'security | What will you do if you see an unattended bag near the gate? | do not touch, report, cordon, procedure | 10',
       'ramp | What will you do if you see foreign object debris near an aircraft stand? | FOD, stop, remove, report, safety | 10',
       'catering | How will you verify special meals before handover? | meal code, passenger count, label, seal, record | 10',
+      'general | Tell me about a time you worked under pressure. | situation, action, result, calm | 10',
     ].join('\n');
     this.downloadText('ground-staff-question-template.txt', sample);
   }
@@ -510,40 +613,171 @@ export class App {
     return `${minutes}:${seconds}`;
   }
 
+  // ---------- question flow: blink -> hide -> answer -> next ----------
+
+  /** Question starts blinking and the recording starts automatically. */
+  private beginQuestion(): void {
+    this.clearTicker();
+    this.advancing = false;
+    this.phase.set('question');
+    this.secondsLeft.set(this.blinkSeconds());
+    this.recordingSeconds.set(0);
+    this.questionStartedAt = Date.now();
+    this.phaseEndsAt = this.questionStartedAt + this.blinkSeconds() * 1000;
+    this.startRecording();
+    this.ticker = window.setInterval(() => this.tick(), 250);
+  }
+
+  private tick(): void {
+    const now = Date.now();
+    this.recordingSeconds.set(Math.floor((now - this.questionStartedAt) / 1000));
+
+    const remainingMs = this.phaseEndsAt - now;
+    this.secondsLeft.set(Math.max(0, Math.ceil(remainingMs / 1000)));
+    if (remainingMs > 0) return;
+
+    if (this.phase() === 'question') {
+      // Blink time over: question is removed, answer time starts.
+      this.phase.set('answer');
+      this.phaseEndsAt = now + this.answerSeconds() * 1000;
+      this.secondsLeft.set(this.answerSeconds());
+    } else if (this.phase() === 'answer') {
+      // Answer time over: save and move to next question automatically.
+      void this.next();
+    }
+  }
+
+  private clearTicker(): void {
+    if (this.ticker !== undefined) window.clearInterval(this.ticker);
+    this.ticker = undefined;
+  }
+
+  // ---------- camera / recording helpers ----------
+
   private attachStream(): void {
-    if (!this.cameraPreview?.nativeElement || !this.stream) return;
-    this.cameraPreview.nativeElement.srcObject = this.stream;
+    const video = this.cameraEl;
+    if (!video || !this.stream) return;
+
+    // Angular does not always apply the `muted` attribute as a property; iOS/Android block autoplay without it.
+    video.muted = true;
+    video.playsInline = true;
+    video.setAttribute('playsinline', 'true');
+    video.setAttribute('webkit-playsinline', 'true');
+    if (video.srcObject !== this.stream) video.srcObject = this.stream;
+    video.play().catch(() => undefined);
   }
 
-  private stopCamera(): void {
-    this.stopRecording();
-    this.stream?.getTracks().forEach((track) => track.stop());
-    this.stream = undefined;
-    this.cameraReady.set(false);
+  private describeCameraError(error: unknown): string {
+    const name = (error as DOMException | undefined)?.name;
+    switch (name) {
+      case 'NotAllowedError':
+      case 'SecurityError':
+        return 'Camera/microphone permission is blocked. Allow it in the browser site settings and tap Retry camera.';
+      case 'NotFoundError':
+      case 'OverconstrainedError':
+        return 'No camera found on this device.';
+      case 'NotReadableError':
+      case 'AbortError':
+        return 'Camera is being used by another app. Close that app and tap Retry camera.';
+      default:
+        return 'Could not start the camera. Please check permission and tap Retry camera.';
+    }
   }
 
-  private stopAndBuildVideoUrl(): Promise<string | undefined> {
-    if (!this.recorder || !this.isRecording()) {
+  private pickMimeType(): string | undefined {
+    const candidates = [
+      'video/webm;codecs=vp9,opus',
+      'video/webm;codecs=vp8,opus',
+      'video/webm',
+      'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+      'video/mp4',
+    ];
+    return candidates.find((type) => MediaRecorder.isTypeSupported(type));
+  }
+
+  private startRecording(): void {
+    this.chunks = [];
+    this.recorder = undefined;
+    this.isRecording.set(false);
+    if (!this.stream) return;
+
+    if (typeof MediaRecorder === 'undefined') {
+      this.cameraMessage.set('Recording is not supported in this browser - preview only.');
+      return;
+    }
+
+    try {
+      const mimeType = this.pickMimeType();
+      const recorder = mimeType ? new MediaRecorder(this.stream, { mimeType }) : new MediaRecorder(this.stream);
+      recorder.ondataavailable = (event) => {
+        if (event.data.size) this.chunks.push(event.data);
+      };
+      recorder.start(1000);
+      this.recorder = recorder;
+      this.isRecording.set(true);
+    } catch {
+      this.recorder = undefined;
+      this.cameraMessage.set('Could not start recording on this device.');
+    }
+  }
+
+  private stopRecordingAndBuild(): Promise<RecordedMedia | undefined> {
+    const recorder = this.recorder;
+    this.recorder = undefined;
+
+    if (!recorder || recorder.state === 'inactive') {
+      this.isRecording.set(false);
       return Promise.resolve(undefined);
     }
 
     return new Promise((resolve) => {
-      const recorder = this.recorder;
-      if (!recorder) {
-        resolve(undefined);
-        return;
-      }
-
       recorder.onstop = () => {
-        const blob = new Blob(this.chunks, { type: 'video/webm' });
-        resolve(blob.size ? URL.createObjectURL(blob) : undefined);
+        const type = recorder.mimeType || 'video/webm';
+        const blob = new Blob(this.chunks, { type });
+        this.chunks = [];
+        this.isRecording.set(false);
+        resolve(blob.size ? { url: URL.createObjectURL(blob), extension: type.includes('mp4') ? 'mp4' : 'webm' } : undefined);
       };
-      this.stopRecording();
+      try {
+        recorder.stop();
+      } catch {
+        this.isRecording.set(false);
+        resolve(undefined);
+      }
     });
   }
 
+  private discardRecording(): void {
+    const recorder = this.recorder;
+    this.recorder = undefined;
+    this.chunks = [];
+    this.isRecording.set(false);
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.onstop = null;
+      recorder.ondataavailable = null;
+      try {
+        recorder.stop();
+      } catch {
+        // already stopped
+      }
+    }
+  }
+
+  private stopCamera(): void {
+    this.discardRecording();
+    this.stream?.getTracks().forEach((track) => track.stop());
+    this.stream = undefined;
+    if (this.cameraEl) this.cameraEl.srcObject = null;
+    this.cameraReady.set(false);
+  }
+
   private shuffle<T>(items: T[]): T[] {
-    return [...items].sort(() => Math.random() - 0.5);
+    const copy = [...items];
+    for (let i = copy.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [copy[i], copy[j]] = [copy[j], copy[i]];
+    }
+    return copy;
   }
 
   private downloadText(fileName: string, text: string): void {

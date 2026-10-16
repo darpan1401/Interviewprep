@@ -37,21 +37,34 @@
         <div class="control-row">
           <label>
             Questions
-            <select [ngModel]="examSize()" (ngModelChange)="setExamSize($event)">
-              <option value="4">4</option>
-              <option value="6">6</option>
-              <option value="8">8</option>
+            <select [ngModel]="examSize()" (ngModelChange)="examSize.set(+$event)">
+              @for (size of examSizeOptions; track size) {
+                <option [ngValue]="size">{{ size }}</option>
+              }
             </select>
           </label>
           <label>
-            Timer per answer
-            <select [ngModel]="questionSeconds()" (ngModelChange)="questionSeconds.set(+$event)">
-              <option value="60">60 sec</option>
-              <option value="90">90 sec</option>
-              <option value="120">120 sec</option>
+            Question blink time
+            <select [ngModel]="blinkSeconds()" (ngModelChange)="blinkSeconds.set(+$event)">
+              @for (sec of blinkOptions; track sec) {
+                <option [ngValue]="sec">{{ sec }} sec</option>
+              }
+            </select>
+          </label>
+          <label>
+            Answer time
+            <select [ngModel]="answerSeconds()" (ngModelChange)="answerSeconds.set(+$event)">
+              @for (sec of answerOptions; track sec) {
+                <option [ngValue]="sec">{{ sec }} sec</option>
+              }
             </select>
           </label>
         </div>
+
+        <p class="flow-hint">
+          Each question blinks for {{ blinkSeconds() }} sec and recording starts automatically. Then the question
+          is hidden and you get {{ answerSeconds() }} sec to answer. After that the next question comes by itself.
+        </p>
 
         <div class="upload-box">
           <div>
@@ -100,12 +113,31 @@
         <div class="progress-track">
           <div [style.width.%]="progress()"></div>
         </div>
-        <h2>{{ currentQuestion()?.prompt }}</h2>
-        <div class="keyword-row">
-          @for (keyword of currentQuestion()?.keywords; track keyword) {
-            <span>{{ keyword }}</span>
-          }
-        </div>
+        @if (phase() === 'question') {
+          <div class="question-stage">
+            <h2 class="blinking">{{ currentQuestion()?.prompt }}</h2>
+            <div class="keyword-row">
+              @for (keyword of currentQuestion()?.keywords; track keyword) {
+                <span>{{ keyword }}</span>
+              }
+            </div>
+            <p class="phase-note">Question will disappear in {{ secondsLeft() }} sec</p>
+          </div>
+        } @else if (phase() === 'answer') {
+          <div class="question-stage hidden-state">
+            <strong>Question hidden - answer now</strong>
+            <span class="countdown">{{ secondsLeft() }}</span>
+            <div class="progress-track answer-track">
+              <div [style.width.%]="phaseProgress()"></div>
+            </div>
+            <p class="phase-note">Next question comes automatically when the time ends</p>
+          </div>
+        } @else {
+          <div class="question-stage hidden-state">
+            <strong>Waiting for camera</strong>
+            <p class="phase-note">The question will start blinking and recording will begin as soon as the camera is ready.</p>
+          </div>
+        }
 
         <label class="range-label">
           Answer confidence: {{ currentRating() }}/5
@@ -130,8 +162,8 @@
 
         <div class="exam-actions">
           <button type="button" class="secondary" (click)="restart()">Exit</button>
-          <button type="button" class="primary" (click)="saveAndNext()">
-            {{ currentIndex() + 1 === interviewQuestions().length ? 'Finish round' : 'Save & next' }}
+          <button type="button" class="primary" (click)="next()" [disabled]="phase() === 'idle'">
+            {{ currentIndex() + 1 === interviewQuestions().length ? 'Finish round' : 'Next question' }}
           </button>
         </div>
       </div>
@@ -141,22 +173,30 @@
           <video #cameraPreview autoplay muted playsinline></video>
           @if (!cameraReady()) {
             <div class="camera-placeholder">
-              <strong>Camera permission needed</strong>
-              <button type="button" class="secondary" (click)="enableCamera()">Enable camera</button>
+              <strong>{{ phase() === 'idle' ? 'Camera not ready' : 'Camera is off' }}</strong>
+              @if (cameraMessage()) {
+                <span class="camera-message">{{ cameraMessage() }}</span>
+              }
+              @if (phase() === 'idle') {
+                <div class="camera-actions">
+                  <button type="button" class="secondary" (click)="retryCamera()">Retry camera</button>
+                  <button type="button" class="secondary" (click)="startWithoutCamera()">Continue without camera</button>
+                </div>
+              } @else {
+                <span class="camera-message">This answer is not being recorded.</span>
+              }
             </div>
           }
         </div>
+        @if (cameraReady() && cameraMessage()) {
+          <p class="camera-note">{{ cameraMessage() }}</p>
+        }
         <div class="record-bar">
           <div>
             <span [class.live]="isRecording()"></span>
-            <strong>{{ isRecording() ? 'Recording' : 'Ready' }}</strong>
-            <small>{{ formatTime(recordingSeconds()) }} / {{ questionSeconds() }} sec</small>
+            <strong>{{ isRecording() ? 'Recording' : 'Not recording' }}</strong>
+            <small>{{ formatTime(recordingSeconds()) }} / {{ formatTime(totalQuestionSeconds()) }}</small>
           </div>
-          @if (isRecording()) {
-            <button type="button" class="danger" (click)="stopRecording()">Stop</button>
-          } @else {
-            <button type="button" class="primary" (click)="startRecording()" [disabled]="!cameraReady()">Record answer</button>
-          }
         </div>
       </div>
     </section>
@@ -184,7 +224,7 @@
           @if (previewAnswer()?.videoUrl) {
             <video [src]="previewAnswer()?.videoUrl" controls></video>
             <h3>{{ previewAnswer()?.question?.prompt }}</h3>
-            <a [href]="previewAnswer()?.videoUrl" download="selected-mock-answer.webm">Download selected recording</a>
+            <a [href]="previewAnswer()?.videoUrl" [attr.download]="'selected-mock-answer.' + previewAnswer()?.extension">Download selected recording</a>
           } @else {
             <div class="empty-preview">
               <strong>No video selected</strong>
@@ -203,7 +243,7 @@
             <p>{{ answer.notes || 'No notes added.' }}</p>
             @if (answer.videoUrl) {
               <button type="button" class="secondary" (click)="selectPreview(index)">Preview recording</button>
-              <a [href]="answer.videoUrl" download="mock-answer.webm">Download recording</a>
+              <a [href]="answer.videoUrl" [attr.download]="'mock-answer-' + (index + 1) + '.' + answer.extension">Download recording</a>
             } @else {
               <span class="missing-video">No recording saved for this answer</span>
             }
