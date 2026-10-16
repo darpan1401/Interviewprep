@@ -7,12 +7,16 @@ The app lets a candidate answer random interview questions, record answers throu
 ## Features
 
 - Random HR, safety, scenario and operations questions
-- Auto flow for every question: the question blinks (5-10 sec, selectable) and recording starts automatically, then the question is hidden and the candidate gets the answer time (default 45 sec), then the next question comes by itself
+- Auto flow for every question: the question is shown for 5-10 sec (selectable) and recording starts automatically, then the question is hidden and the candidate gets the answer time (default 45 sec), then the next question comes by itself
 - Webcam and microphone recording for every answer (works on phone browsers over HTTPS)
-- Final result page with score, answer notes and video preview
+- Review page (no score, practice only) with your notes and video preview of every answer
 - Recording download option
 - Custom question upload using a simple `.txt` file
 - Sample question template download from the website
+
+- Help and support: visitors send a question or bug report, the admin replies and the reply is shown publicly (data kept in Google Sheets via Apps Script)
+- Admin panel at `/#admin` (ID and password are checked inside Apps Script, never stored in this repo)
+- Privacy disclaimer: interview recordings, answers and notes stay only in the user's browser
 
 ## Tech Stack
 
@@ -84,6 +88,10 @@ Department code (always use this):
 ```text
 general
 ```
+
+## Support and Admin panel
+
+Follow `SUPPORT_SETUP.md` (Google Sheet + Apps Script from `apps-script/Code.gs`), then set `SUPPORT_API_URL` and `LINKEDIN_URL` in `src/app/support.config.ts`.
 
 ## Camera Permission
 

@@ -2,6 +2,18 @@ import { CommonModule } from '@angular/common';
 import { Component, ElementRef, OnDestroy, ViewChild, computed, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { GENERAL_QUESTIONS } from './general-questions';
+import {
+  AdminQuery,
+  PublicQuery,
+  QueryType,
+  adminDelete,
+  adminList,
+  adminReply,
+  fetchPublicQueries,
+  isSupportConfigured,
+  submitQuery,
+} from './support-api';
+import { ADMIN_HASH, LINKEDIN_URL } from './support.config';
 
 type Stage = 'setup' | 'interview' | 'results';
 
@@ -25,7 +37,6 @@ interface Question {
 
 interface AnswerRecord {
   question: Question;
-  rating: number;
   notes: string;
   videoUrl?: string;
   extension: string;
@@ -89,7 +100,6 @@ export class App implements OnDestroy {
   readonly interviewQuestions = signal<Question[]>([]);
   readonly answers = signal<AnswerRecord[]>([]);
   readonly currentIndex = signal(0);
-  readonly currentRating = signal(3);
   readonly currentNotes = signal('');
   readonly cameraReady = signal(false);
   readonly cameraMessage = signal('');
@@ -99,6 +109,32 @@ export class App implements OnDestroy {
   readonly secondsLeft = signal(0);
   readonly uploadMessage = signal('No custom file added');
   readonly previewIndex = signal(0);
+
+  // ---------- support / help / admin ----------
+  readonly linkedinUrl = LINKEDIN_URL;
+  readonly supportConfigured = isSupportConfigured();
+  readonly view = signal<'main' | 'admin'>('main');
+
+  readonly supportType = signal<QueryType>('Help');
+  readonly supportName = signal('');
+  readonly supportEmail = signal('');
+  readonly supportMessage = signal('');
+  readonly supportWebsite = signal(''); // honeypot
+  readonly supportStatus = signal<'idle' | 'sending' | 'sent' | 'error'>('idle');
+  readonly supportError = signal('');
+  readonly publicQueries = signal<PublicQuery[]>([]);
+  readonly publicLoading = signal(false);
+  readonly publicError = signal('');
+
+  readonly adminId = signal('');
+  readonly adminPassword = signal('');
+  readonly adminLoggedIn = signal(false);
+  readonly adminBusy = signal(false);
+  readonly adminError = signal('');
+  readonly adminQueries = signal<AdminQuery[]>([]);
+  readonly replyDrafts = signal<Record<string, string>>({});
+
+  private readonly onHashChange = () => this.syncView();
 
   private stream?: MediaStream;
   private recorder?: MediaRecorder;
@@ -129,24 +165,135 @@ export class App implements OnDestroy {
     return total ? Math.round((this.secondsLeft() / total) * 100) : 0;
   });
 
-  readonly finalScore = computed(() => {
-    const total = this.answers().reduce((sum, answer) => sum + answer.question.maxScore, 0);
-    const earned = this.answers().reduce((sum, answer) => sum + answer.rating * 2, 0);
-    return total ? Math.round((earned / total) * 100) : 0;
-  });
-
-  readonly resultBand = computed(() => {
-    const score = this.finalScore();
-    if (score >= 80) return 'Interview Ready';
-    if (score >= 60) return 'Good Practice Round';
-    return 'Needs More Rehearsal';
-  });
-
   readonly previewAnswer = computed(() => this.answers()[this.previewIndex()]);
 
+  constructor() {
+    window.addEventListener('hashchange', this.onHashChange);
+    this.syncView();
+    void this.loadPublicQueries();
+  }
+
   ngOnDestroy(): void {
+    window.removeEventListener('hashchange', this.onHashChange);
     this.clearTicker();
     this.stopCamera();
+  }
+
+  // ---------- support / help ----------
+
+  private syncView(): void {
+    const isAdmin = window.location.hash === ADMIN_HASH;
+    this.view.set(isAdmin ? 'admin' : 'main');
+    if (!isAdmin) this.adminLogout(false);
+  }
+
+  async loadPublicQueries(): Promise<void> {
+    if (!this.supportConfigured) return;
+    this.publicLoading.set(true);
+    this.publicError.set('');
+    try {
+      this.publicQueries.set(await fetchPublicQueries());
+    } catch (error) {
+      this.publicError.set(error instanceof Error ? error.message : 'Could not load questions.');
+    } finally {
+      this.publicLoading.set(false);
+    }
+  }
+
+  async sendSupport(): Promise<void> {
+    if (this.supportStatus() === 'sending') return;
+    if (this.supportMessage().trim().length < 5) {
+      this.supportStatus.set('error');
+      this.supportError.set('Please write your question or the problem in a few words.');
+      return;
+    }
+    this.supportStatus.set('sending');
+    this.supportError.set('');
+    try {
+      await submitQuery({
+        type: this.supportType(),
+        name: this.supportName(),
+        email: this.supportEmail(),
+        message: this.supportMessage(),
+        website: this.supportWebsite(),
+      });
+      this.supportStatus.set('sent');
+      this.supportMessage.set('');
+    } catch (error) {
+      this.supportStatus.set('error');
+      this.supportError.set(error instanceof Error ? error.message : 'Could not send your message.');
+    }
+  }
+
+  // ---------- admin panel ----------
+
+  async adminLogin(): Promise<void> {
+    if (this.adminBusy()) return;
+    this.adminBusy.set(true);
+    this.adminError.set('');
+    try {
+      this.adminQueries.set(await adminList(this.adminId().trim(), this.adminPassword()));
+      this.adminLoggedIn.set(true);
+    } catch (error) {
+      this.adminLoggedIn.set(false);
+      this.adminError.set(error instanceof Error ? error.message : 'Login failed.');
+    } finally {
+      this.adminBusy.set(false);
+    }
+  }
+
+  adminLogout(clearHash = true): void {
+    this.adminLoggedIn.set(false);
+    this.adminId.set('');
+    this.adminPassword.set('');
+    this.adminQueries.set([]);
+    this.replyDrafts.set({});
+    this.adminError.set('');
+    if (clearHash && window.location.hash === ADMIN_HASH) {
+      history.replaceState(null, '', window.location.pathname + window.location.search);
+      this.view.set('main');
+    }
+  }
+
+  setReplyDraft(queryId: string, value: string): void {
+    this.replyDrafts.update((drafts) => ({ ...drafts, [queryId]: value }));
+  }
+
+  replyText(item: AdminQuery): string {
+    return this.replyDrafts()[item.id] ?? item.reply;
+  }
+
+  async saveReply(item: AdminQuery): Promise<void> {
+    await this.runAdminAction(async () => {
+      const items = await adminReply(this.adminId().trim(), this.adminPassword(), item.id, this.replyText(item));
+      this.adminQueries.set(items);
+      this.replyDrafts.update((drafts) => {
+        const { [item.id]: _removed, ...rest } = drafts;
+        return rest;
+      });
+      void this.loadPublicQueries();
+    });
+  }
+
+  async removeQuery(item: AdminQuery): Promise<void> {
+    if (!window.confirm('Delete this query permanently?')) return;
+    await this.runAdminAction(async () => {
+      this.adminQueries.set(await adminDelete(this.adminId().trim(), this.adminPassword(), item.id));
+      void this.loadPublicQueries();
+    });
+  }
+
+  private async runAdminAction(action: () => Promise<void>): Promise<void> {
+    if (this.adminBusy()) return;
+    this.adminBusy.set(true);
+    this.adminError.set('');
+    try {
+      await action();
+    } catch (error) {
+      this.adminError.set(error instanceof Error ? error.message : 'Something went wrong.');
+    } finally {
+      this.adminBusy.set(false);
+    }
   }
 
   allQuestions(): Question[] {
@@ -163,7 +310,6 @@ export class App implements OnDestroy {
     this.answers.set([]);
     this.previewIndex.set(0);
     this.currentIndex.set(0);
-    this.currentRating.set(3);
     this.currentNotes.set('');
     this.recordingSeconds.set(0);
     this.advancing = false;
@@ -252,7 +398,6 @@ export class App implements OnDestroy {
 
     const record: AnswerRecord = {
       question,
-      rating: this.currentRating(),
       notes: this.currentNotes(),
       videoUrl: media?.url,
       extension: media?.extension ?? 'webm',
@@ -260,7 +405,6 @@ export class App implements OnDestroy {
     };
 
     this.answers.update((answers) => [...answers, record]);
-    this.currentRating.set(3);
     this.currentNotes.set('');
 
     if (this.currentIndex() + 1 >= this.interviewQuestions().length) {
@@ -350,16 +494,14 @@ export class App implements OnDestroy {
   exportResults(): void {
     const lines = [
       `Candidate: ${this.candidateName() || 'Practice Candidate'}`,
-      `Department: ${this.activeDepartment().name}`,
-      `Score: ${this.finalScore()}%`,
-      `Band: ${this.resultBand()}`,
+      'Mock interview review notes (practice only, no score)',
       '',
       ...this.answers().map(
         (answer, index) =>
-          `${index + 1}. ${answer.question.prompt}\nRating: ${answer.rating}/5\nDuration: ${this.formatTime(answer.durationSeconds)}\nNotes: ${answer.notes || 'No notes'}`,
+          `${index + 1}. ${answer.question.prompt}\nDuration: ${this.formatTime(answer.durationSeconds)}\nNotes: ${answer.notes || 'No notes'}`,
       ),
     ];
-    this.downloadText('ground-staff-mock-result.txt', lines.join('\n\n'));
+    this.downloadText('mock-interview-review.txt', lines.join('\n\n'));
   }
 
   formatTime(totalSeconds: number): string {
