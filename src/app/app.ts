@@ -5,14 +5,7 @@ import { GENERAL_QUESTIONS } from './general-questions';
 
 type Stage = 'setup' | 'interview' | 'results';
 
-type DepartmentId =
-  | 'customer-service'
-  | 'security'
-  | 'cabin-appearance'
-  | 'cargo'
-  | 'ramp'
-  | 'catering'
-  | 'general';
+type DepartmentId = 'general';
 
 interface Department {
   id: DepartmentId;
@@ -41,238 +34,11 @@ interface AnswerRecord {
 
 const DEPARTMENTS: Department[] = [
   {
-    id: 'customer-service',
-    name: 'Customer Service',
-    area: 'Check-in, boarding gate, baggage desk',
-    icon: 'CS',
-    color: '#12665a',
-  },
-  {
-    id: 'security',
-    name: 'Security Officer',
-    area: 'Access control, screening support, threat awareness',
-    icon: 'SO',
-    color: '#8f3d25',
-  },
-  {
-    id: 'cabin-appearance',
-    name: 'Cabin Appearance',
-    area: 'Aircraft cleaning, lost item checks, presentation',
-    icon: 'CA',
-    color: '#5444a0',
-  },
-  {
-    id: 'cargo',
-    name: 'Cargo',
-    area: 'Documents, warehouse, dangerous goods awareness',
-    icon: 'CG',
-    color: '#2f5f9f',
-  },
-  {
-    id: 'ramp',
-    name: 'Ramp',
-    area: 'Apron safety, baggage loading, turnaround',
-    icon: 'RA',
-    color: '#6f5a18',
-  },
-  {
-    id: 'catering',
-    name: 'Catering',
-    area: 'Flight kitchen, meal uplift, hygiene and seals',
-    icon: 'CT',
-    color: '#7a3455',
-  },
-  {
     id: 'general',
-    name: 'General HR & Airport Basics',
+    name: 'Airline Interview Questions',
     area: 'HR, situation based and airport knowledge questions',
     icon: 'GN',
     color: '#0f6b8a',
-  },
-];
-
-const BANK: Question[] = [
-  {
-    department: 'customer-service',
-    prompt: 'A passenger is angry because the flight is delayed and they may miss a connection. How will you handle the conversation?',
-    type: 'Scenario',
-    keywords: ['empathy', 'facts', 'options', 'supervisor', 'calm'],
-    maxScore: 10,
-  },
-  {
-    department: 'customer-service',
-    prompt: 'Tell us about yourself and why you want to work in airport ground operations.',
-    type: 'HR',
-    keywords: ['service', 'aviation', 'teamwork', 'shift', 'responsibility'],
-    maxScore: 10,
-  },
-  {
-    department: 'customer-service',
-    prompt: 'How would you explain excess baggage charges to a passenger who refuses to pay?',
-    type: 'Scenario',
-    keywords: ['policy', 'polite', 'alternatives', 'documentation', 'escalation'],
-    maxScore: 10,
-  },
-  {
-    department: 'customer-service',
-    prompt: 'What details will you verify before issuing a boarding pass?',
-    type: 'Operations',
-    keywords: ['identity', 'ticket', 'destination', 'documents', 'baggage'],
-    maxScore: 10,
-  },
-  {
-    department: 'customer-service',
-    prompt: 'How do you manage a long queue when boarding is about to close?',
-    type: 'Scenario',
-    keywords: ['priority', 'communication', 'queue', 'coordination', 'calm'],
-    maxScore: 10,
-  },
-  {
-    department: 'security',
-    prompt: 'You notice an unattended bag near a gate. What are your immediate actions?',
-    type: 'Safety',
-    keywords: ['do not touch', 'cordon', 'report', 'supervisor', 'procedure'],
-    maxScore: 10,
-  },
-  {
-    department: 'security',
-    prompt: 'How would you respond if a colleague asks you to ignore an access-control step because everyone is in a hurry?',
-    type: 'Scenario',
-    keywords: ['no shortcut', 'policy', 'safety', 'respectful', 'report'],
-    maxScore: 10,
-  },
-  {
-    department: 'security',
-    prompt: 'What does aviation security mean to you in a ground-staff role?',
-    type: 'HR',
-    keywords: ['passengers', 'aircraft', 'vigilance', 'rules', 'responsibility'],
-    maxScore: 10,
-  },
-  {
-    department: 'security',
-    prompt: 'A passenger becomes verbally aggressive during screening support. How will you de-escalate?',
-    type: 'Scenario',
-    keywords: ['calm voice', 'distance', 'policy', 'help', 'incident'],
-    maxScore: 10,
-  },
-  {
-    department: 'security',
-    prompt: 'Which habits help you stay alert during night shifts?',
-    type: 'HR',
-    keywords: ['rest', 'hydration', 'rotation', 'checklist', 'focus'],
-    maxScore: 10,
-  },
-  {
-    department: 'cabin-appearance',
-    prompt: 'What would you check before declaring the cabin ready for boarding?',
-    type: 'Operations',
-    keywords: ['seat pockets', 'lavatory', 'overhead bins', 'lost items', 'cleanliness'],
-    maxScore: 10,
-  },
-  {
-    department: 'cabin-appearance',
-    prompt: 'You find a passenger passport during cabin cleaning. What will you do?',
-    type: 'Safety',
-    keywords: ['secure', 'report', 'handover', 'log', 'chain of custody'],
-    maxScore: 10,
-  },
-  {
-    department: 'cabin-appearance',
-    prompt: 'How will you work quickly without missing safety or cleanliness standards?',
-    type: 'Scenario',
-    keywords: ['checklist', 'zones', 'teamwork', 'quality', 'time'],
-    maxScore: 10,
-  },
-  {
-    department: 'cabin-appearance',
-    prompt: 'Why is cabin appearance important for an airline brand?',
-    type: 'HR',
-    keywords: ['first impression', 'comfort', 'trust', 'hygiene', 'brand'],
-    maxScore: 10,
-  },
-  {
-    department: 'cargo',
-    prompt: 'What information would you check on cargo documents before acceptance?',
-    type: 'Operations',
-    keywords: ['shipper', 'weight', 'destination', 'contents', 'special handling'],
-    maxScore: 10,
-  },
-  {
-    department: 'cargo',
-    prompt: 'How would you react if a package looks damaged or leaking?',
-    type: 'Safety',
-    keywords: ['isolate', 'do not load', 'report', 'dangerous goods', 'documentation'],
-    maxScore: 10,
-  },
-  {
-    department: 'cargo',
-    prompt: 'How do you avoid errors when handling multiple shipments under time pressure?',
-    type: 'Scenario',
-    keywords: ['scan', 'labels', 'double-check', 'sequence', 'communication'],
-    maxScore: 10,
-  },
-  {
-    department: 'cargo',
-    prompt: 'What is your understanding of dangerous goods awareness?',
-    type: 'Operations',
-    keywords: ['classification', 'labels', 'training', 'segregation', 'reporting'],
-    maxScore: 10,
-  },
-  {
-    department: 'ramp',
-    prompt: 'What safety rules will you follow while working around an aircraft on the apron?',
-    type: 'Safety',
-    keywords: ['PPE', 'engines', 'vehicles', 'FOD', 'signals'],
-    maxScore: 10,
-  },
-  {
-    department: 'ramp',
-    prompt: 'A turnaround is running late. How do you keep speed without compromising safety?',
-    type: 'Scenario',
-    keywords: ['coordination', 'checklist', 'no shortcut', 'roles', 'supervisor'],
-    maxScore: 10,
-  },
-  {
-    department: 'ramp',
-    prompt: 'What is FOD and why is it serious on the ramp?',
-    type: 'Operations',
-    keywords: ['foreign object debris', 'engine damage', 'inspection', 'report', 'prevention'],
-    maxScore: 10,
-  },
-  {
-    department: 'ramp',
-    prompt: 'How would you handle a disagreement with a teammate during loading?',
-    type: 'Scenario',
-    keywords: ['pause safely', 'communicate', 'load plan', 'supervisor', 'respect'],
-    maxScore: 10,
-  },
-  {
-    department: 'catering',
-    prompt: 'What hygiene steps are important before loading meals onto an aircraft?',
-    type: 'Operations',
-    keywords: ['temperature', 'seal', 'PPE', 'expiry', 'clean equipment'],
-    maxScore: 10,
-  },
-  {
-    department: 'catering',
-    prompt: 'A meal count does not match the flight load sheet. What will you do?',
-    type: 'Scenario',
-    keywords: ['verify', 'report', 'do not guess', 'documentation', 'coordination'],
-    maxScore: 10,
-  },
-  {
-    department: 'catering',
-    prompt: 'How would you prevent cross-contamination in a flight kitchen or loading area?',
-    type: 'Safety',
-    keywords: ['segregation', 'allergens', 'cleaning', 'temperature', 'labels'],
-    maxScore: 10,
-  },
-  {
-    department: 'catering',
-    prompt: 'Why are seals and handover records important in catering operations?',
-    type: 'Operations',
-    keywords: ['security', 'traceability', 'tamper evidence', 'audit', 'accountability'],
-    maxScore: 10,
   },
 ];
 
@@ -313,7 +79,7 @@ export class App implements OnDestroy {
   readonly blinkOptions = [5, 6, 7, 8, 9, 10];
   readonly answerOptions = [30, 45, 60, 90, 120];
 
-  readonly selectedDepartment = signal<DepartmentId>('customer-service');
+  readonly selectedDepartment = signal<DepartmentId>('general');
   readonly stage = signal<Stage>('setup');
   readonly candidateName = signal('');
   readonly examSize = signal(6);
@@ -384,7 +150,7 @@ export class App implements OnDestroy {
   }
 
   allQuestions(): Question[] {
-    return [...BANK, ...GENERAL_BANK, ...this.customQuestions()];
+    return [...GENERAL_BANK, ...this.customQuestions()];
   }
 
   selectDepartment(id: DepartmentId): void {
@@ -538,23 +304,12 @@ export class App implements OnDestroy {
       '# Easy format:',
       '# department-code | question | important words | marks',
       '#',
-      '# Department codes:',
-      '# customer-service',
-      '# security',
-      '# cabin-appearance',
-      '# cargo',
-      '# ramp',
-      '# catering',
-      '# general',
+      '# Department code: always write general',
       '#',
       '# EXAMPLE - You can copy this style:',
-      '# customer-service | How will you help a passenger whose baggage is overweight? | polite, policy, options, supervisor | 10',
+      '# general | Tell me about a time you helped a stranger. | situation, action, result | 10',
       '',
       '# EDITABLE QUESTIONS START BELOW',
-      'customer-service | How will you help a first-time flyer who is confused at check-in? | empathy, documents, guidance, calm | 10',
-      'security | What will you do if you see an unattended bag near the gate? | do not touch, report, cordon, procedure | 10',
-      'ramp | What will you do if you see foreign object debris near an aircraft stand? | FOD, stop, remove, report, safety | 10',
-      'catering | How will you verify special meals before handover? | meal code, passenger count, label, seal, record | 10',
       'general | Tell me about a time you worked under pressure. | situation, action, result, calm | 10',
     ].join('\n');
     this.downloadText('ground-staff-question-template.txt', sample);

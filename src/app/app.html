@@ -16,9 +16,9 @@
         <div class="hero-image" aria-hidden="true"></div>
         <div class="intro-copy">
           <p class="eyebrow">Role based practice</p>
-          <h2>Select department and start a recorded mock round</h2>
+          <h2>Start a recorded mock interview round</h2>
           <p>
-            Random HR, scenario, safety and operations questions are generated from the selected ground handling department.
+            Random HR, situation based and airport knowledge questions are picked for every round.
           </p>
         </div>
       </div>
@@ -84,22 +84,6 @@
           Start mock interview
         </button>
       </div>
-    </section>
-
-    <section class="departments">
-      @for (department of departments; track department.id) {
-        <button
-          type="button"
-          class="department-card"
-          [class.active]="selectedDepartment() === department.id"
-          [style.--accent]="department.color"
-          (click)="selectDepartment(department.id)"
-        >
-          <span>{{ department.icon }}</span>
-          <strong>{{ department.name }}</strong>
-          <small>{{ department.area }}</small>
-        </button>
-      }
     </section>
   }
 

@@ -2,18 +2,10 @@
 
 Angular based mock interview website for aviation ground staff practice.
 
-The app lets a candidate select a ground operations department, answer random interview questions, record answers through webcam and mic, and review the final score with video previews.
+The app lets a candidate answer random interview questions, record answers through webcam and mic, and review the final score with video previews.
 
 ## Features
 
-- Department selection for:
-  - Customer Service
-  - Security Officer
-  - Cabin Appearance
-  - Cargo
-  - Ramp
-  - Catering
-  - General HR & Airport Basics (HR, situation based and airport knowledge questions)
 - Random HR, safety, scenario and operations questions
 - Auto flow for every question: the question blinks (5-10 sec, selectable) and recording starts automatically, then the question is hidden and the candidate gets the answer time (default 45 sec), then the next question comes by itself
 - Webcam and microphone recording for every answer (works on phone browsers over HTTPS)
@@ -87,15 +79,9 @@ security | What will you do if you see an unattended bag near the gate? | do not
 ramp | What will you do if you see foreign object debris near an aircraft stand? | FOD, stop, remove, report, safety | 10
 ```
 
-Valid department codes:
+Department code (always use this):
 
 ```text
-customer-service
-security
-cabin-appearance
-cargo
-ramp
-catering
 general
 ```
 
